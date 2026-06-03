@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>De-AI — Remove AI Fingerprints from Academic Writing</title>
+<meta name="description" content="Upload your LaTeX files or select a folder of .tex documents to detect and remove AI writing patterns while preserving academic integrity.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Design Tokens ── */
+:root {
+  --bg: #08090d;
+  --bg-subtle: #0e1017;
+  --surface: #13151d;
+  --surface-2: #191c27;
+  --surface-3: #1f2330;
+  --border: #262a3a;
+  --border-hover: #3a3f55;
+  --text: #e4e6ed;
+  --text-body: #b8bcc8;
+  --text-dim: #7a7f94;
+  --text-muted: #4e5264;
+  --accent: #6c8cff;
+  --accent-light: #8ba5ff;
+  --accent-glow: rgba(108,140,255,.10);
+  --accent-glow-strong: rgba(108,140,255,.22);
+  --purple: #a78bfa;
+  --purple-glow: rgba(167,139,250,.12);
+  --green: #51cf66;
+  --green-soft: #8ce99a;
+  --green-bg: rgba(81,207,102,.08);
+  --green-border: rgba(81,207,102,.25);
+  --red: #ff6b6b;
+  --red-soft: #ffa8a8;
+  --red-bg: rgba(255,107,107,.08);
+  --red-border: rgba(255,107,107,.25);
+  --yellow: #ffd43b;
+  --orange: #ff922b;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.2);
+  --shadow-md: 0 8px 32px rgba(0,0,0,.35);
+  --shadow-lg: 0 20px 60px rgba(0,0,0,.5);
+  --transition: .25s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── Reset & Base ── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Ambient Background ── */
+.ambient {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+}
+.ambient-orb {
+  position: absolute; border-radius: 50%; filter: blur(120px); opacity: .35;
+  animation: orbFloat 20s ease-in-out infinite;
+}
+.ambient-orb:nth-child(1) {
+  width: 600px; height: 600px; top: -15%; left: -10%;
+  background: radial-gradient(circle, rgba(108,140,255,.18), transparent 70%);
+}
+.ambient-orb:nth-child(2) {
+  width: 500px; height: 500px; bottom: -10%; right: -5%;
+  background: radial-gradient(circle, rgba(167,139,250,.14), transparent 70%);
+  animation-delay: -7s; animation-duration: 25s;
+}
+.ambient-orb:nth-child(3) {
+  width: 400px; height: 400px; top: 50%; left: 50%;
+  background: radial-gradient(circle, rgba(81,207,102,.08), transparent 70%);
+  animation-delay: -14s; animation-duration: 30s;
+}
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(30px, -40px) scale(1.05); }
+  66%      { transform: translate(-20px, 20px) scale(.95); }
+}
+
+/* ── Grid Pattern ── */
+.grid-pattern {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(108,140,255,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(108,140,255,.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent);
+}
+
+/* ══════════════════════════════════
+   PICKER VIEW
+   ══════════════════════════════════ */
+.picker-view {
+  position: relative; z-index: 1;
+  max-width: 800px; margin: 0 auto; padding: 0 24px;
+  min-height: 100vh; display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+}
+.picker-view.hidden { display: none; }
+
+/* ── Header ── */
+.header {
+  text-align: center; margin-bottom: 48px;
+  animation: fadeUp .7s ease-out both;
+}
+.logo {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 14px; font-weight: 600; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--accent);
+  margin-bottom: 20px;
+  background: var(--accent-glow);
+  padding: 8px 18px; border-radius: 100px;
+  border: 1px solid rgba(108,140,255,.15);
+}
+.logo-icon {
+  width: 22px; height: 22px;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: #fff;
+}
+h1 {
+  font-size: clamp(32px, 5vw, 48px);
+  font-weight: 800; line-height: 1.15;
+  letter-spacing: -1px;
+  background: linear-gradient(135deg, var(--text) 0%, var(--accent-light) 50%, var(--purple) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 14px;
+}
+.subtitle {
+  font-size: 17px; color: var(--text-dim); line-height: 1.6;
+  max-width: 560px; margin: 0 auto;
+}
+.subtitle strong { color: var(--text-body); font-weight: 600; }
+
+/* ── Upload Card ── */
+.upload-card {
+  width: 100%;
+  background: linear-gradient(145deg, rgba(19,21,29,.8), rgba(25,28,39,.6));
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: var(--shadow-lg);
+  animation: fadeUp .7s .15s ease-out both;
+}
+
+/* ── Drop Zone ── */
+.drop-zone {
+  position: relative;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 48px 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+  background: var(--surface);
+  overflow: hidden;
+}
+.drop-zone::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at 50% 50%, var(--accent-glow), transparent 70%);
+  opacity: 0; transition: opacity .3s;
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(108,140,255,.04);
+}
+.drop-zone:hover::before, .drop-zone.drag-over::before { opacity: 1; }
+.drop-zone.drag-over {
+  transform: scale(1.01);
+  box-shadow: 0 0 40px rgba(108,140,255,.12);
+}
+
+.drop-icon {
+  position: relative; z-index: 1;
+  width: 72px; height: 72px; margin: 0 auto 18px;
+  background: linear-gradient(135deg, var(--accent-glow-strong), var(--purple-glow));
+  border-radius: 18px; border: 1px solid rgba(108,140,255,.15);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 32px;
+  transition: var(--transition);
+}
+.drop-zone:hover .drop-icon { transform: translateY(-4px); }
+.drop-title {
+  position: relative; z-index: 1;
+  font-size: 18px; font-weight: 700; color: var(--text);
+  margin-bottom: 8px;
+}
+.drop-hint {
+  position: relative; z-index: 1;
+  font-size: 14px; color: var(--text-dim); line-height: 1.6;
+}
+.drop-hint .or {
+  display: block; margin: 10px 0;
+  font-size: 12px; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 2px; font-weight: 600;
+}
+
+/* ── Buttons ── */
+.btn-row {
+  position: relative; z-index: 1;
+  display: flex; gap: 10px; justify-content: center;
+  margin-top: 16px; flex-wrap: wrap;
+}
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 20px; border-radius: 10px;
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-body);
+  transition: var(--transition);
+}
+.btn:hover {
+  border-color: var(--accent); color: var(--text);
+  background: rgba(108,140,255,.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(108,140,255,.1);
+}
+.btn .emoji { font-size: 16px; }
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), #5a77e0);
+  color: #fff; border: none;
+  padding: 12px 28px; font-size: 15px; font-weight: 700;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(108,140,255,.25);
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(108,140,255,.35);
+}
+.btn-primary:disabled {
+  opacity: .4; cursor: not-allowed; transform: none; box-shadow: none;
+}
+input[type="file"] { display: none; }
+
+/* ── File Queue ── */
+.file-queue { margin-top: 28px; display: none; }
+.file-queue.visible { display: block; }
+.queue-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.queue-title {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+}
+.queue-count {
+  background: var(--accent-glow-strong);
+  color: var(--accent); font-size: 12px; font-weight: 700;
+  padding: 2px 10px; border-radius: 100px;
+  border: 1px solid rgba(108,140,255,.2);
+}
+.queue-clear {
+  font-size: 12px; font-weight: 600; color: var(--text-muted);
+  background: none; border: none; cursor: pointer; padding: 4px 8px;
+  border-radius: var(--radius-xs); transition: var(--transition);
+}
+.queue-clear:hover { color: var(--red); background: var(--red-bg); }
+.file-list {
+  list-style: none;
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 280px; overflow-y: auto; padding-right: 4px;
+}
+.file-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+  animation: slideIn .3s ease-out both;
+}
+.file-item:hover { border-color: var(--border-hover); }
+.file-icon {
+  width: 36px; height: 36px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--green-bg), rgba(81,207,102,.15));
+  border: 1px solid var(--green-border); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+}
+.file-info { flex: 1; min-width: 0; }
+.file-name {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.file-meta {
+  font-size: 11px; color: var(--text-muted); margin-top: 2px;
+  display: flex; gap: 8px;
+}
+.file-path {
+  max-width: 260px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; direction: rtl; text-align: left;
+}
+.file-remove {
+  width: 28px; height: 28px; flex-shrink: 0;
+  border-radius: 50%; border: 1px solid transparent;
+  background: transparent; color: var(--text-muted);
+  cursor: pointer; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition);
+}
+.file-remove:hover {
+  background: var(--red-bg); border-color: var(--red-border); color: var(--red);
+}
+
+/* ── Action Row ── */
+.action-row {
+  margin-top: 24px; display: none; justify-content: center;
+  animation: fadeUp .4s ease-out both;
+}
+.action-row.visible { display: flex; }
+
+/* ── Info Badges ── */
+.info-row {
+  display: flex; gap: 12px; justify-content: center;
+  margin-top: 32px; flex-wrap: wrap;
+  animation: fadeUp .7s .3s ease-out both;
+}
+.info-badge {
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 16px; border-radius: 100px;
+  background: var(--surface); border: 1px solid var(--border);
+  font-size: 12px; color: var(--text-dim); font-weight: 500;
+}
+.info-badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+.info-badge .dot.green { background: var(--green); }
+.info-badge .dot.blue { background: var(--accent); }
+.info-badge .dot.purple { background: var(--purple); }
+
+/* ── Warning Banner ── */
+.warn-banner {
+  display: none; margin-top: 16px; padding: 12px 16px;
+  background: rgba(255,146,43,.06); border: 1px solid rgba(255,146,43,.2);
+  border-radius: var(--radius-sm); font-size: 13px; color: var(--orange);
+  align-items: center; gap: 8px;
+  animation: fadeUp .3s ease-out both;
+}
+.warn-banner.visible { display: flex; }
+
+/* ── Footer ── */
+.footer {
+  position: relative; z-index: 1;
+  text-align: center; padding: 32px 0 24px;
+  font-size: 12px; color: var(--text-muted);
+  animation: fadeUp .7s .45s ease-out both;
+}
+.footer a { color: var(--accent); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+/* ══════════════════════════════════
+   REVIEW VIEW
+   ══════════════════════════════════ */
+.review-view { display: none; }
+.review-view.active { display: block; }
+
+/* ── Top Bar ── */
+.top-bar {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,9,13,.92); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border); padding: 10px 0;
+}
+.top-inner {
+  max-width: 900px; margin: 0 auto; padding: 0 28px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.top-bar-left { display: flex; align-items: center; gap: 12px; }
+.back-btn {
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text-dim); width: 34px; height: 34px;
+  border-radius: 8px; cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition);
+}
+.back-btn:hover { border-color: var(--accent); color: var(--accent); }
+.top-bar h2 { font-size: 17px; font-weight: 700; color: var(--accent); }
+.top-bar .sub { font-size: 12px; color: var(--text-dim); }
+.stats { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 14px;
+  font-size: 12px; font-weight: 600;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.chip .d { width: 7px; height: 7px; border-radius: 50%; }
+.chip.cp .d { background: var(--yellow); }
+.chip.ca .d { background: var(--green); }
+.chip.cr .d { background: var(--red); }
+
+/* ── Progress ── */
+.prog-wrap { max-width: 900px; margin: 0 auto; padding: 6px 28px 0; }
+.prog-track { height: 3px; background: var(--surface); border-radius: 2px; display: flex; }
+.prog-a { background: var(--green); transition: width .4s; }
+.prog-r { background: var(--red); transition: width .4s; }
+
+/* ── File Tabs ── */
+.file-tabs-wrap { max-width: 900px; margin: 0 auto; padding: 12px 28px 0; }
+.file-tabs {
+  display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px;
+}
+.file-tab {
+  padding: 8px 16px; border-radius: 8px 8px 0 0;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border);
+  border-bottom: none; color: var(--text-dim);
+  transition: var(--transition); white-space: nowrap;
+  flex-shrink: 0;
+}
+.file-tab:hover { color: var(--text); }
+.file-tab.active {
+  background: var(--surface-2); color: var(--accent);
+  border-color: var(--accent); border-bottom: 2px solid var(--surface-2);
+}
+.file-tab .tab-count {
+  font-size: 10px; background: var(--accent-glow);
+  color: var(--accent); padding: 1px 6px; border-radius: 8px;
+  margin-left: 6px;
+}
+
+/* ── Review Content ── */
+.review-wrap { max-width: 900px; margin: 16px auto 90px; padding: 0 28px; }
+.review-paper {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 32px 40px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.3);
+}
+.review-paper .file-heading {
+  font-size: 14px; font-weight: 700; color: var(--accent);
+  margin-bottom: 6px; font-family: 'JetBrains Mono', monospace;
+}
+.review-paper .line-block {
+  font-family: 'Crimson Pro', serif; font-size: 16px; line-height: 1.8;
+  color: var(--text-body); margin-bottom: 10px; text-align: justify;
+  position: relative;
+}
+.review-paper .line-num {
+  position: absolute; left: -44px; top: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text-muted); user-select: none;
+  width: 32px; text-align: right;
+}
+.review-paper .latex-cmd {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; color: var(--green-soft);
+  background: rgba(81,207,102,.06);
+  padding: 0 3px; border-radius: 3px;
+}
+
+/* ── Change Markers ── */
+.chg-wrap { position: relative; display: inline; }
+.chg { display: inline; border-radius: 3px; transition: all .2s; }
+.chg-del {
+  background: var(--red-bg); color: var(--red-soft);
+  text-decoration: line-through;
+  text-decoration-color: rgba(255,100,100,.4);
+}
+.chg-add {
+  background: var(--green-bg); color: var(--green-soft);
+}
+.chg-controls {
+  display: inline-flex; gap: 3px; vertical-align: middle; margin-left: 2px;
+}
+.chg-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface-2);
+  cursor: pointer; font-size: 12px; transition: all .15s;
+  vertical-align: middle; font-family: sans-serif; color: var(--text-dim);
+}
+.chg-btn.ab:hover { background: rgba(81,207,102,.2); border-color: var(--green); color: var(--green); }
+.chg-btn.rb:hover { background: rgba(255,107,107,.2); border-color: var(--red); color: var(--red); }
+.chg-btn.ub:hover { background: var(--surface); color: var(--text-dim); }
+.chg-wrap.accepted .chg-del { display: none; }
+.chg-wrap.accepted .chg-add { background: transparent; color: var(--text-body); text-decoration: none; }
+.chg-wrap.rejected .chg-del { background: transparent; color: var(--text-body); text-decoration: none; }
+.chg-wrap.rejected .chg-add { display: none; }
+.chg-wrap.accepted .chg-controls,
+.chg-wrap.rejected .chg-controls { opacity: .4; }
+.chg-tooltip {
+  display: none; position: absolute; bottom: calc(100% + 6px); left: 0;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 14px; width: 320px; z-index: 50;
+  font-family: 'Inter', sans-serif; font-size: 12px; color: var(--text-dim);
+  box-shadow: 0 8px 24px rgba(0,0,0,.4); line-height: 1.5;
+}
+.chg-wrap:hover .chg-tooltip { display: block; }
+.chg-tooltip .tt-id {
+  font-weight: 700; color: var(--accent); font-size: 11px;
+  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px;
+}
+.chg-tooltip .tt-tag {
+  font-size: 10px; padding: 1px 6px; border-radius: 8px;
+  background: var(--surface); color: var(--text-muted);
+  display: inline-block; margin: 1px;
+}
+.sev {
+  display: inline-block; padding: 1px 6px; border-radius: 8px;
+  font-size: 10px; font-weight: 700; margin-left: 6px;
+}
+.sev.p1 { background: rgba(255,146,43,.15); color: var(--orange); }
+.sev.p2 { background: rgba(255,212,59,.15); color: var(--yellow); }
+
+/* ── No Findings ── */
+.no-findings {
+  text-align: center; padding: 60px 20px;
+  color: var(--text-dim); font-size: 16px;
+}
+.no-findings .big-icon { font-size: 48px; margin-bottom: 16px; }
+
+/* ── Bottom Bar ── */
+.bot-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(8,9,13,.92); backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border); padding: 10px 0;
+}
+.bot-inner {
+  max-width: 900px; margin: 0 auto; padding: 0 28px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.bot-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.bb {
+  padding: 7px 16px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--text-dim); font-size: 12px; font-weight: 600;
+  cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: all .2s;
+}
+.bb:hover { border-color: var(--text-muted); color: var(--text); }
+.bb.ba { border-color: var(--green-border); color: var(--green); background: rgba(81,207,102,.08); }
+.bb.br { border-color: var(--red-border); color: var(--red); background: rgba(255,107,107,.08); }
+.bb.primary {
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  color: #fff; border: none; font-weight: 700;
+  padding: 8px 20px; font-size: 13px;
+}
+.bb.primary:hover { box-shadow: 0 4px 16px rgba(108,140,255,.3); }
+.bb.bd {
+  background: linear-gradient(135deg, var(--green), #2ea043);
+  color: #fff; border: none; font-weight: 700;
+  padding: 8px 20px; font-size: 13px;
+}
+.bb.bd:hover { box-shadow: 0 4px 16px rgba(81,207,102,.35); }
+
+/* ── Modal ── */
+.modal-bg {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.7); backdrop-filter: blur(6px);
+  z-index: 200; align-items: center; justify-content: center;
+}
+.modal-bg.on { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; width: 90%; max-width: 650px;
+  max-height: 80vh; display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.modal-h {
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-h h3 { font-size: 16px; }
+.modal-x {
+  background: none; border: none; color: var(--text-dim);
+  font-size: 22px; cursor: pointer;
+}
+.modal-b {
+  padding: 20px; overflow-y: auto; flex: 1;
+}
+.modal-b pre {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  white-space: pre-wrap; word-break: break-word;
+  color: var(--text); max-height: 40vh; overflow-y: auto;
+}
+.modal-f {
+  padding: 12px 20px; border-top: 1px solid var(--border);
+  display: flex; gap: 8px; justify-content: flex-end;
+}
+.sg { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.sc { padding: 14px; border-radius: 8px; text-align: center; }
+.sc.st { background: var(--accent-glow); border: 1px solid rgba(108,140,255,.2); }
+.sc.sa { background: var(--green-bg); border: 1px solid var(--green-border); }
+.sc.sr { background: var(--red-bg); border: 1px solid var(--red-border); }
+.sc .n { font-size: 28px; font-weight: 800; line-height: 1; }
+.sc.st .n { color: var(--accent); }
+.sc.sa .n { color: var(--green); }
+.sc.sr .n { color: var(--red); }
+.sc .l { font-size: 11px; color: var(--text-dim); margin-top: 3px; font-weight: 600; text-transform: uppercase; }
+
+/* ── Processing Overlay ── */
+.processing-overlay {
+  display: none; position: fixed; inset: 0; z-index: 300;
+  background: rgba(8,9,13,.95); backdrop-filter: blur(10px);
+  align-items: center; justify-content: center; flex-direction: column; gap: 20px;
+}
+.processing-overlay.active { display: flex; }
+.spinner {
+  width: 48px; height: 48px; border: 3px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.proc-text { font-size: 16px; font-weight: 600; color: var(--text); }
+.proc-sub { font-size: 13px; color: var(--text-dim); }
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 32px; left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: var(--surface-2); border: 1px solid var(--green-border);
+  color: var(--green); padding: 12px 24px; border-radius: 12px;
+  font-size: 13px; font-weight: 600; z-index: 500;
+  box-shadow: var(--shadow-md);
+  opacity: 0; transition: all .3s ease; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .picker-view { padding: 0 14px; }
+  .upload-card { padding: 24px 18px; }
+  .drop-zone { padding: 32px 18px; }
+  h1 { font-size: 28px; }
+  .btn-row { flex-direction: column; align-items: stretch; }
+  .file-path { max-width: 140px; }
+  .review-paper { padding: 20px 16px; }
+  .top-inner, .prog-wrap, .bot-inner, .file-tabs-wrap { padding-left: 12px; padding-right: 12px; }
+  .review-wrap { padding: 0 8px; }
+  .chg-tooltip { width: 240px; }
+  .sg { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Ambient Background -->
+<div class="ambient">
+  <div class="ambient-orb"></div>
+  <div class="ambient-orb"></div>
+  <div class="ambient-orb"></div>
+</div>
+<div class="grid-pattern"></div>
+
+<!-- ══════ PICKER VIEW ══════ -->
+<div class="picker-view" id="pickerView">
+  <header class="header">
+    <div class="logo"><span class="logo-icon">⚗️</span> De-AI</div>
+    <h1>Remove AI Fingerprints<br>from Your Papers</h1>
+    <p class="subtitle">
+      Upload your <strong>.tex files</strong> or select an <strong>entire folder</strong>
+      of LaTeX documents to detect and humanize AI-written passages.
+    </p>
+  </header>
+
+  <div class="upload-card" id="uploadCard">
+    <div class="drop-zone" id="dropZone"
+         ondragover="handleDragOver(event)"
+         ondragleave="handleDragLeave(event)"
+         ondrop="handleDrop(event)"
+         onclick="document.getElementById('fileInput').click()">
+      <div class="drop-icon">📄</div>
+      <div class="drop-title">Drop LaTeX files here</div>
+      <div class="drop-hint">
+        Drag &amp; drop <strong>.tex</strong> files anywhere on this area
+        <span class="or">— or —</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+          <span class="emoji">📎</span> Choose Files
+        </button>
+        <button class="btn" onclick="event.stopPropagation(); document.getElementById('folderInput').click()">
+          <span class="emoji">📁</span> Choose Folder
+        </button>
+      </div>
+    </div>
+
+    <div class="warn-banner" id="warnBanner">
+      <span>⚠️</span>
+      <span id="warnText"></span>
+    </div>
+
+    <div class="file-queue" id="fileQueue">
+      <div class="queue-header">
+        <div class="queue-title">
+          Selected Files <span class="queue-count" id="queueCount">0</span>
+        </div>
+        <button class="queue-clear" onclick="clearAll()">Clear All</button>
+      </div>
+      <ul class="file-list" id="fileList"></ul>
+    </div>
+
+    <div class="action-row" id="actionRow">
+      <button class="btn btn-primary" id="processBtn" onclick="processFiles()">
+        🔬 De-AI'ze Selected Files
+      </button>
+    </div>
+  </div>
+
+  <div class="info-row">
+    <div class="info-badge"><span class="dot green"></span> Preserves LaTeX syntax</div>
+    <div class="info-badge"><span class="dot blue"></span> Supports .tex &amp; folders</div>
+    <div class="info-badge"><span class="dot purple"></span> Client-side scanning</div>
+  </div>
+
+  <div class="footer">
+    De-AI · Academic Writing Toolkit · Powered by
+    <a href="https://github.com/bahayonghang/academic-writing-skills" target="_blank" rel="noopener">academic-writing-skills</a>
+  </div>
+</div>
+
+<!-- ══════ REVIEW VIEW ══════ -->
+<div class="review-view" id="reviewView">
+  <div class="top-bar">
+    <div class="top-inner">
+      <div class="top-bar-left">
+        <button class="back-btn" onclick="backToPicker()" title="Back to file picker">←</button>
+        <div>
+          <h2>🔬 De-AI Review</h2>
+          <div class="sub" id="reviewSub"></div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="chip cp"><span class="d"></span><span id="sP">0</span> Pending</div>
+        <div class="chip ca"><span class="d"></span><span id="sA">0</span> Accepted</div>
+        <div class="chip cr"><span class="d"></span><span id="sR">0</span> Rejected</div>
+      </div>
+    </div>
+    <div class="prog-wrap">
+      <div class="prog-track">
+        <div class="prog-a" id="pA" style="width:0"></div>
+        <div class="prog-r" id="pR" style="width:0"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="file-tabs-wrap" id="fileTabsWrap">
+    <div class="file-tabs" id="fileTabs"></div>
+  </div>
+
+  <div class="review-wrap">
+    <div class="review-paper" id="reviewPaper"></div>
+  </div>
+
+  <div class="bot-bar">
+    <div class="bot-inner">
+      <div class="bot-btns">
+        <button class="bb ba" onclick="bulkAll('accepted')">✓ Accept All</button>
+        <button class="bb br" onclick="bulkAll('rejected')">✕ Reject All</button>
+        <button class="bb" onclick="bulkAll('pending')">↺ Reset All</button>
+      </div>
+      <div class="bot-btns">
+        <button class="bb primary" onclick="showExport()">📋 Export Decisions</button>
+        <button class="bb bd" onclick="applyAndDownload()">💾 Apply & Download .tex</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ PROCESSING OVERLAY ══════ -->
+<div class="processing-overlay" id="procOverlay">
+  <div class="spinner"></div>
+  <div class="proc-text" id="procText">Scanning files…</div>
+  <div class="proc-sub" id="procSub">Reading LaTeX content</div>
+</div>
+
+<!-- ══════ MODAL ══════ -->
+<div class="modal-bg" id="mod">
+  <div class="modal">
+    <div class="modal-h">
+      <h3 id="modT">Export</h3>
+      <button class="modal-x" onclick="closeMod()">×</button>
+    </div>
+    <div class="modal-b" id="modB"></div>
+    <div class="modal-f" id="modF"></div>
+  </div>
+</div>
+
+<!-- Hidden Inputs -->
+<input type="file" id="fileInput" accept=".tex" multiple>
+<input type="file" id="folderInput" webkitdirectory directory multiple>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════
+//   DE-AI PATTERN DATABASE
+// ═══════════════════════════════════════
+const AI_PATTERNS = [
+  // ── Tier 1: Most flagged AI words (always remove or replace) ──
+  { regex: /\b(a\s+)?novel\b/gi, replace: '', category: 'Tier 1', tag: '#1 Significance Inflation', priority: 'P1', reason: 'Most frequently flagged AI word. Novelty should be shown by contributions, not adjectives.' },
+  { regex: /\bcomprehensive\b/gi, replace: 'thorough', category: 'Tier 1', tag: 'Filler', priority: 'P1', reason: '"comprehensive" is heavily flagged by AI detectors. Use "thorough" or remove.' },
+  { regex: /\bcutting[\s-]edge\b/gi, replace: '', category: 'Tier 1', tag: '#1 Significance Inflation', priority: 'P1', reason: '"cutting-edge" is heavily AI-associated. Remove unless quoting a source.' },
+  { regex: /\bstate[\s-]of[\s-]the[\s-]art\b/gi, replace: 'recent', category: 'Tier 1', tag: 'Filler', priority: 'P2', reason: 'Overused AI phrase. Use "recent" or specify what makes it current.' },
+  { regex: /\bgroundbreaking\b/gi, replace: '', category: 'Tier 1', tag: '#1 Significance Inflation', priority: 'P1', reason: 'Heavily flagged. Let results speak for themselves.' },
+  { regex: /\bpioneering\b/gi, replace: '', category: 'Tier 1', tag: '#1 Significance Inflation', priority: 'P1', reason: 'AI-associated self-praise. Remove.' },
+
+  // ── Tier 2: Frequently flagged words ──
+  { regex: /\bleverages?\b/gi, replace: 'uses', category: 'Tier 2', tag: 'AI Verb', priority: 'P2', reason: '"leverage" is an AI-favored verb. "uses" is simpler and more natural.' },
+  { regex: /\benhances?\b/gi, replace: 'improves', category: 'Tier 2', tag: 'AI Verb', priority: 'P2', reason: '"enhance" is AI-flagged. "improves" is a less flagged alternative.' },
+  { regex: /\butiliz(e[sd]?|ing)\b/gi, replace: function(m) { return m.replace(/utiliz/i, 'us'); }, category: 'Tier 2', tag: 'AI Verb', priority: 'P2', reason: '"utilize" is unnecessarily formal and AI-flagged. Use "use".' },
+  { regex: /\bfacilitat(e[sd]?|ing)\b/gi, replace: function(m) { return m.replace(/facilitat/i, 'enabl'); }, category: 'Tier 2', tag: 'AI Verb', priority: 'P2', reason: '"facilitate" is formulaic. Prefer "enable" or "allow".' },
+  { regex: /\bfundamental(ly)?\b/gi, replace: '', category: 'Tier 2', tag: 'Filler', priority: 'P2', reason: '"fundamental" adds no meaning when the concept is inherently basic.' },
+  { regex: /\bsignificant(ly)?\b/gi, replace: '', category: 'Tier 2', tag: 'Filler', priority: 'P2', reason: '"significantly" is filler — let quantitative data show significance.' },
+  { regex: /\brobust\b/gi, replace: 'reliable', category: 'Tier 2', tag: 'Filler', priority: 'P2', reason: '"robust" is overused in AI-generated text. Use "reliable" or be specific.' },
+  { regex: /\bscalable\b/gi, replace: '', category: 'Tier 2', tag: 'Filler', priority: 'P2', reason: '"scalable" is often AI filler. Remove if not backed by benchmarks.' },
+  { regex: /\binnovative\b/gi, replace: '', category: 'Tier 2', tag: '#1 Significance Inflation', priority: 'P1', reason: 'Innovation should be demonstrated, not claimed.' },
+  { regex: /\bseamless(ly)?\b/gi, replace: '', category: 'Tier 2', tag: 'Filler', priority: 'P2', reason: '"seamless" is marketing language, not academic.' },
+  { regex: /\bpivotal\b/gi, replace: 'important', category: 'Tier 2', tag: 'Filler', priority: 'P2', reason: '"pivotal" is AI-inflated. Use "important" or "key".' },
+  { regex: /\bparadigm\b/gi, replace: 'approach', category: 'Tier 2', tag: 'Filler', priority: 'P2', reason: '"paradigm" is overused in AI text. "approach" or "model" is clearer.' },
+  { regex: /\bproactive(ly)?\b/gi, replace: '', category: 'Tier 2', tag: 'Filler', priority: 'P2', reason: '"proactive" is AI filler.' },
+  { regex: /\bdelves?\b/gi, replace: 'examines', category: 'Tier 2', tag: 'AI Verb', priority: 'P1', reason: '"delve" is one of the most flagged AI verbs.' },
+  { regex: /\bunravel\b/gi, replace: 'explain', category: 'Tier 2', tag: 'AI Verb', priority: 'P1', reason: '"unravel" is strongly AI-associated.' },
+  { regex: /\binterplay\b/gi, replace: 'interaction', category: 'Tier 2', tag: 'AI Noun', priority: 'P2', reason: '"interplay" is AI-favored. Use "interaction" or "relationship".' },
+  { regex: /\bnuanced\b/gi, replace: 'detailed', category: 'Tier 2', tag: 'Filler', priority: 'P2', reason: '"nuanced" is an AI-associated adjective. Use "detailed" or "subtle".' },
+  { regex: /\bmeticulous(ly)?\b/gi, replace: 'careful(ly)', category: 'Tier 2', tag: 'Filler', priority: 'P2', reason: '"meticulous" is AI-flagged. "careful" is more natural.' },
+  { regex: /\bunderpinning\b/gi, replace: 'basis', category: 'Tier 2', tag: 'AI Noun', priority: 'P2', reason: '"underpinning" is AI-favored. Use "basis" or "foundation".' },
+  { regex: /\bmitigat(e[sd]?|ing)\b/gi, replace: function(m) { return m.replace(/mitigat/i, 'reduc'); }, category: 'Tier 2', tag: 'AI Verb', priority: 'P2', reason: '"mitigate" is overused in AI text. "reduce" or "lessen" is clearer.' },
+  { regex: /\bresilien(ce|t)\b/gi, replace: function(m) { return m.includes('ce') ? 'reliability' : 'reliable'; }, category: 'Tier 2', tag: 'Filler', priority: 'P2', reason: '"resilience/resilient" is AI-favored outside of ecology/materials science.' },
+  { regex: /\bsynerg(y|ies|istic)\b/gi, replace: 'combination', category: 'Tier 2', tag: 'Filler', priority: 'P1', reason: '"synergy" is marketing language, not academic.' },
+
+  // ── Formulaic Phrases ──
+  { regex: /\bhighlights the importance of\b/gi, replace: 'argues for', category: 'Phrase', tag: '#23 Filler Phrase', priority: 'P1', reason: '"highlights the importance of" is a formulaic AI filler. "argues for" is direct.' },
+  { regex: /\bemphasizing the importance of\b/gi, replace: 'arguing that', category: 'Phrase', tag: '#23 Filler Phrase', priority: 'P1', reason: 'Formulaic AI filler. Use "arguing that" for directness.' },
+  { regex: /\braises a significant threat to\b/gi, replace: 'threatens', category: 'Phrase', tag: '#23 Filler Phrase', priority: 'P1', reason: '5 words → 1 word, same meaning.' },
+  { regex: /\boffers? insights into\b/gi, replace: 'evaluates', category: 'Phrase', tag: '#23 Filler Phrase', priority: 'P1', reason: '"offers insights into" is filler. "evaluates" is direct.' },
+  { regex: /\brecogni[sz]ing the emerging threat caused by\b/gi, replace: 'because', category: 'Phrase', tag: '#23 Filler Phrase', priority: 'P1', reason: '6 words → 1 word.' },
+  { regex: /\bfurthermore,?\s+the study highlights?\b/gi, replace: 'the study also identifies', category: 'Phrase', tag: '#23 Filler Phrase', priority: 'P1', reason: '"Furthermore, the study highlights" is AI-formulaic.' },
+  { regex: /\bit is worth noting that\b/gi, replace: '', category: 'Phrase', tag: '#23 Filler Phrase', priority: 'P1', reason: 'Completely empty phrase. Remove.' },
+  { regex: /\bit is important to note that\b/gi, replace: '', category: 'Phrase', tag: '#23 Filler Phrase', priority: 'P1', reason: 'Empty transitional phrase.' },
+  { regex: /\bin today'?s rapidly evolving\b/gi, replace: 'in current', category: 'Phrase', tag: '#6 Formulaic', priority: 'P1', reason: 'Cliché AI opener.' },
+  { regex: /\bin the realm of\b/gi, replace: 'in', category: 'Phrase', tag: '#6 Formulaic', priority: 'P1', reason: '"in the realm of" → "in". 4 words → 1.' },
+  { regex: /\bplays a (crucial|vital|pivotal|key|important) role in\b/gi, replace: 'affects', category: 'Phrase', tag: '#6 Formulaic', priority: 'P1', reason: 'Formulaic AI phrase. Use a direct verb.' },
+  { regex: /\ba (growing|increasing) body of (research|literature|evidence)\b/gi, replace: 'recent work', category: 'Phrase', tag: '#6 Formulaic', priority: 'P1', reason: 'AI cliché opener. "recent work" is direct.' },
+  { regex: /\bpaving the way for\b/gi, replace: 'enabling', category: 'Phrase', tag: '#25 Generic Closer', priority: 'P1', reason: 'Formulaic closer. Use "enabling" or rephrase.' },
+  { regex: /\bsheds? (new )?light on\b/gi, replace: 'clarifies', category: 'Phrase', tag: '#6 Formulaic', priority: 'P1', reason: 'AI cliché. "clarifies" or "explains" is direct.' },
+  { regex: /\bopens? (up )?(new )?avenues for\b/gi, replace: 'enables', category: 'Phrase', tag: '#25 Generic Closer', priority: 'P1', reason: 'Generic closer. Use "enables" or be specific.' },
+  { regex: /\b(lays?|laid) the (ground)?work for\b/gi, replace: 'supports', category: 'Phrase', tag: '#25 Generic Closer', priority: 'P1', reason: 'Generic AI closer.' },
+
+  // ── Generic Closers ──
+  { regex: /\bpositioning it as a\b/gi, replace: 'making it', category: 'Closer', tag: '#25 Generic Closer', priority: 'P1', reason: '"positioning it as a" is a formulaic closer pattern.' },
+  { regex: /\bshowing a significant contribution towards?\b/gi, replace: 'advancing', category: 'Closer', tag: '#25 Generic Closer', priority: 'P1', reason: 'Generic closer with significance inflation.' },
+  { regex: /\bserves? as a critical foundation for\b/gi, replace: '', category: 'Closer', tag: '#25 Generic Closer', priority: 'P1', reason: 'Empty praise. Rephrase to be specific.' },
+];
+
+// Protected LaTeX patterns — never match inside these
+const LATEX_PROTECTED = /\\(?:cite|ref|label|eqref|autoref|cref|Cref|nameref|url|href|texttt|textbf|textit|emph|footnote|caption|begin|end|section|subsection|subsubsection|chapter|paragraph|input|include|usepackage|documentclass|bibliography|bibliographystyle)\{[^}]*\}|\\[a-zA-Z]+|\$[^$]+\$|\$\$[^$]+\$\$|%[^\n]*/g;
+
+// ═══════════════════════════════════════
+//   STATE
+// ═══════════════════════════════════════
+let selectedFiles = [];
+let allFindings = [];  // { id, fileIdx, fileName, original, replacement, lineNum, context, category, tag, priority, reason, status }
+let fileContents = []; // { name, content, findings[] }
+let activeFileIdx = 0;
+
+// ═══════════════════════════════════════
+//   PICKER — File input & drag/drop
+// ═══════════════════════════════════════
+const fileInput = document.getElementById('fileInput');
+const folderInput = document.getElementById('folderInput');
+fileInput.addEventListener('change', (e) => { addFiles(Array.from(e.target.files)); e.target.value = ''; });
+folderInput.addEventListener('change', (e) => { addFiles(Array.from(e.target.files)); e.target.value = ''; });
+
+function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('dropZone').classList.add('drag-over'); }
+function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); document.getElementById('dropZone').classList.remove('drag-over'); }
+function handleDrop(e) {
+  e.preventDefault(); e.stopPropagation();
+  document.getElementById('dropZone').classList.remove('drag-over');
+  const items = e.dataTransfer.items;
+  if (items) {
+    const promises = [];
+    for (const item of items) {
+      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+      if (entry) promises.push(traverseEntry(entry));
+    }
+    Promise.all(promises).then(r => addFiles(r.flat()));
+  } else {
+    addFiles(Array.from(e.dataTransfer.files));
+  }
+}
+
+function traverseEntry(entry, path = '') {
+  return new Promise(resolve => {
+    if (entry.isFile) {
+      entry.file(f => {
+        Object.defineProperty(f, 'relativePath', { value: path + f.name, writable: false });
+        resolve([f]);
+      });
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader(), all = [];
+      const read = () => reader.readEntries(entries => {
+        if (!entries.length) Promise.all(all.map(e => traverseEntry(e, path + entry.name + '/'))).then(r => resolve(r.flat()));
+        else { all.push(...entries); read(); }
+      });
+      read();
+    }
+  });
+}
+
+function addFiles(files) {
+  let skipped = 0;
+  files.forEach(f => {
+    const name = f.name || '';
+    if (!name.toLowerCase().endsWith('.tex')) { skipped++; return; }
+    const path = f.webkitRelativePath || f.relativePath || '';
+    const key = path || name;
+    if (selectedFiles.some(sf => (sf.path || sf.file.name) === key)) return;
+    selectedFiles.push({ file: f, path, id: 'f_' + Math.random().toString(36).substr(2, 9) });
+  });
+  if (skipped > 0) showWarning(`${skipped} non-.tex file${skipped > 1 ? 's' : ''} skipped.`);
+  renderQueue();
+}
+
+function removeFile(id) {
+  selectedFiles = selectedFiles.filter(f => f.id !== id);
+  renderQueue();
+}
+function clearAll() { selectedFiles = []; renderQueue(); hideWarning(); }
+
+function renderQueue() {
+  const q = document.getElementById('fileQueue'), l = document.getElementById('fileList');
+  const c = document.getElementById('queueCount'), a = document.getElementById('actionRow');
+  const b = document.getElementById('processBtn');
+  if (!selectedFiles.length) { q.classList.remove('visible'); a.classList.remove('visible'); return; }
+  q.classList.add('visible'); a.classList.add('visible');
+  c.textContent = selectedFiles.length;
+  b.textContent = `🔬 De-AI'ze ${selectedFiles.length} File${selectedFiles.length > 1 ? 's' : ''}`;
+  l.innerHTML = selectedFiles.map((f, i) => {
+    const name = f.file.name, size = fmtSize(f.file.size);
+    const folder = f.path ? f.path.replace(/[^/\\]*$/, '') : '';
+    return `<li class="file-item" style="animation-delay:${Math.min(i*50,300)}ms">
+      <div class="file-icon">📝</div>
+      <div class="file-info">
+        <div class="file-name" title="${esc(name)}">${esc(name)}</div>
+        <div class="file-meta"><span>${size}</span>${folder ? `<span class="file-path" title="${esc(f.path)}">${esc(folder)}</span>` : ''}</div>
+      </div>
+      <button class="file-remove" onclick="removeFile('${f.id}')" title="Remove">✕</button>
+    </li>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════
+//   PROCESS — Read files & scan for AI
+// ═══════════════════════════════════════
+function processFiles() {
+  if (!selectedFiles.length) return;
+  showProcessing('Reading files…', `0 / ${selectedFiles.length}`);
+
+  let loaded = 0;
+  fileContents = [];
+  allFindings = [];
+
+  selectedFiles.forEach((sf, idx) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target.result;
+      loaded++;
+      updateProcessing('Scanning for AI patterns…', `${loaded} / ${selectedFiles.length} files`);
+      const findings = scanContent(content, sf.file.name, idx);
+      fileContents.push({ name: sf.file.name, content, findings, originalPath: sf.path || '' });
+      allFindings.push(...findings);
+
+      if (loaded === selectedFiles.length) {
+        // Sort fileContents by original order
+        fileContents.sort((a, b) => {
+          const ai = selectedFiles.findIndex(s => s.file.name === a.name);
+          const bi = selectedFiles.findIndex(s => s.file.name === b.name);
+          return ai - bi;
+        });
+        // Re-index
+        let gid = 1;
+        fileContents.forEach((fc, fi) => {
+          fc.findings.forEach(f => { f.id = gid++; f.fileIdx = fi; });
+        });
+        allFindings = fileContents.flatMap(fc => fc.findings);
+
+        setTimeout(() => {
+          hideProcessing();
+          showReview();
+        }, 400);
+      }
+    };
+    reader.readAsText(sf.file);
+  });
+}
+
+function scanContent(text, fileName, fileIdx) {
+  const findings = [];
+  const lines = text.split('\n');
+
+  // Build a mask of protected ranges
+  const protectedRanges = [];
+  let m;
+  const fullText = text;
+  const protRe = new RegExp(LATEX_PROTECTED.source, 'g');
+  while ((m = protRe.exec(fullText)) !== null) {
+    protectedRanges.push([m.index, m.index + m[0].length]);
+  }
+  function isProtected(start, end) {
+    return protectedRanges.some(([ps, pe]) => start >= ps && end <= pe);
+  }
+
+  // Scan each pattern
+  AI_PATTERNS.forEach(pattern => {
+    const re = new RegExp(pattern.regex.source, pattern.regex.flags);
+    let match;
+    while ((match = re.exec(fullText)) !== null) {
+      const matchStart = match.index;
+      const matchEnd = matchStart + match[0].length;
+
+      // Skip if inside a protected LaTeX command
+      if (isProtected(matchStart, matchEnd)) continue;
+
+      // Find line number
+      let charCount = 0, lineNum = 1;
+      for (let i = 0; i < lines.length; i++) {
+        if (charCount + lines[i].length >= matchStart) { lineNum = i + 1; break; }
+        charCount += lines[i].length + 1; // +1 for \n
+      }
+
+      // Skip if inside a comment
+      const lineContent = lines[lineNum - 1] || '';
+      const colInLine = matchStart - charCount;
+      const beforeMatch = lineContent.substring(0, colInLine);
+      if (beforeMatch.includes('%')) continue;
+
+      // Get context (the line)
+      const context = lineContent.trim();
+
+      // Compute replacement
+      let replacement;
+      if (typeof pattern.replace === 'function') {
+        replacement = pattern.replace(match[0]);
+      } else {
+        replacement = pattern.replace;
+      }
+
+      findings.push({
+        id: 0, // will be set later
+        fileIdx,
+        fileName,
+        original: match[0],
+        replacement,
+        lineNum,
+        context,
+        category: pattern.category,
+        tag: pattern.tag,
+        priority: pattern.priority,
+        reason: pattern.reason,
+        status: 'pending',
+      });
+    }
+  });
+
+  // Sort by line number
+  findings.sort((a, b) => a.lineNum - b.lineNum);
+  return findings;
+}
+
+// ═══════════════════════════════════════
+//   REVIEW VIEW
+// ═══════════════════════════════════════
+function showReview() {
+  document.getElementById('pickerView').classList.add('hidden');
+  document.getElementById('reviewView').classList.add('active');
+  document.getElementById('reviewSub').textContent = `${allFindings.length} findings across ${fileContents.length} file${fileContents.length > 1 ? 's' : ''}`;
+  activeFileIdx = 0;
+  renderFileTabs();
+  renderReviewContent();
+  upStats();
+}
+
+function backToPicker() {
+  document.getElementById('reviewView').classList.remove('active');
+  document.getElementById('pickerView').classList.remove('hidden');
+}
+
+function renderFileTabs() {
+  const wrap = document.getElementById('fileTabsWrap');
+  if (fileContents.length <= 1) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  document.getElementById('fileTabs').innerHTML = fileContents.map((fc, i) =>
+    `<div class="file-tab ${i === activeFileIdx ? 'active' : ''}" onclick="switchTab(${i})">
+      ${esc(fc.name)}<span class="tab-count">${fc.findings.length}</span>
+    </div>`
+  ).join('');
+}
+
+function switchTab(idx) {
+  activeFileIdx = idx;
+  renderFileTabs();
+  renderReviewContent();
+}
+
+function renderReviewContent() {
+  const paper = document.getElementById('reviewPaper');
+  const fc = fileContents[activeFileIdx];
+
+  if (!fc || !fc.findings.length) {
+    paper.innerHTML = `<div class="no-findings">
+      <div class="big-icon">✅</div>
+      <div><strong>${fc ? esc(fc.name) : 'No files'}</strong></div>
+      <div style="margin-top:8px;">No AI patterns detected in this file. Looking clean!</div>
+    </div>`;
+    return;
+  }
+
+  const lines = fc.content.split('\n');
+  // Group findings by line number
+  const byLine = {};
+  fc.findings.forEach(f => {
+    if (!byLine[f.lineNum]) byLine[f.lineNum] = [];
+    byLine[f.lineNum].push(f);
+  });
+
+  // Render lines with findings
+  let html = `<div class="file-heading">📄 ${esc(fc.name)}</div>`;
+
+  // Get unique line numbers with findings
+  const flaggedLines = [...new Set(fc.findings.map(f => f.lineNum))].sort((a, b) => a - b);
+
+  flaggedLines.forEach(ln => {
+    const lineFindings = byLine[ln];
+    let lineText = lines[ln - 1] || '';
+
+    // Build highlighted line — replace matches with change markers
+    // Process from end to start to preserve indices
+    const sortedFindings = [...lineFindings].sort((a, b) => {
+      const ai = lineText.indexOf(a.original);
+      const bi = lineText.indexOf(b.original);
+      return bi - ai; // reverse order
+    });
+
+    sortedFindings.forEach(f => {
+      const idx = lineText.indexOf(f.original);
+      if (idx === -1) return;
+      const before = lineText.substring(0, idx);
+      const after = lineText.substring(idx + f.original.length);
+
+      const sevClass = f.priority === 'P1' ? 'p1' : 'p2';
+      const marker = `<span id="w${f.id}" class="chg-wrap ${f.status}">` +
+        `<span class="chg chg-del">${esc(f.original)}</span>` +
+        `<span class="chg chg-add">${esc(f.replacement)}</span>` +
+        `<span class="chg-controls">` +
+          `<button class="chg-btn ab" onclick="acc(${f.id})" title="Accept">✓</button>` +
+          `<button class="chg-btn rb" onclick="rej(${f.id})" title="Reject">✕</button>` +
+          `<button class="chg-btn ub" onclick="res(${f.id})" title="Reset">↺</button>` +
+        `</span>` +
+        `<span class="chg-tooltip">` +
+          `<span class="tt-id">Change #${f.id} <span class="sev ${sevClass}">${f.priority}</span></span>` +
+          `<span class="tt-tag">${esc(f.category)}</span> ` +
+          `<span class="tt-tag">${esc(f.tag)}</span><br>` +
+          `${esc(f.reason)}` +
+        `</span>` +
+      `</span>`;
+
+      lineText = before + marker + after;
+    });
+
+    html += `<div class="line-block"><span class="line-num">${ln}</span>${lineText}</div>`;
+  });
+
+  paper.innerHTML = html;
+}
+
+// ═══════════════════════════════════════
+//   CHANGE ACTIONS
+// ═══════════════════════════════════════
+function acc(id) { setStatus(id, 'accepted'); }
+function rej(id) { setStatus(id, 'rejected'); }
+function res(id) { setStatus(id, 'pending'); }
+
+function setStatus(id, status) {
+  const f = allFindings.find(f => f.id === id);
+  if (f) f.status = status;
+  const el = document.getElementById('w' + id);
+  if (el) el.className = 'chg-wrap ' + status;
+  upStats();
+}
+
+function bulkAll(status) {
+  // Only affect findings in the active file tab
+  const fc = fileContents[activeFileIdx];
+  if (!fc) return;
+  fc.findings.forEach(f => {
+    f.status = status;
+    const el = document.getElementById('w' + f.id);
+    if (el) el.className = 'chg-wrap ' + status;
+  });
+  upStats();
+}
+
+function upStats() {
+  let a = 0, r = 0, p = 0;
+  allFindings.forEach(f => {
+    if (f.status === 'accepted') a++;
+    else if (f.status === 'rejected') r++;
+    else p++;
+  });
+  const t = allFindings.length || 1;
+  document.getElementById('sP').textContent = p;
+  document.getElementById('sA').textContent = a;
+  document.getElementById('sR').textContent = r;
+  document.getElementById('pA').style.width = (a / t * 100) + '%';
+  document.getElementById('pR').style.width = (r / t * 100) + '%';
+}
+
+// ═══════════════════════════════════════
+//   EXPORT
+// ═══════════════════════════════════════
+function showExport() {
+  let a = 0, r = 0;
+  allFindings.forEach(f => { if (f.status === 'accepted') a++; if (f.status === 'rejected') r++; });
+  const t = allFindings.length;
+  const p = t - a - r;
+
+  // Build per-file export
+  let exportText = `De-AI Review Export\n${'='.repeat(50)}\n`;
+  exportText += `Total: ${t} | Accepted: ${a} | Rejected: ${r} | Pending: ${p}\n\n`;
+
+  fileContents.forEach(fc => {
+    if (!fc.findings.length) return;
+    exportText += `── ${fc.name} ──\n`;
+    fc.findings.forEach(f => {
+      const status = f.status.toUpperCase();
+      const arrow = f.replacement ? ` → "${f.replacement}"` : ' → [remove]';
+      exportText += `  [${status}] Line ${f.lineNum}: "${f.original}"${arrow} (${f.tag}, ${f.priority})\n`;
+    });
+    exportText += '\n';
+  });
+
+  // Build accepted changes as sed-like commands
+  const accepted = allFindings.filter(f => f.status === 'accepted');
+  if (accepted.length) {
+    exportText += `\n── Accepted Changes (apply these) ──\n`;
+    accepted.forEach(f => {
+      exportText += `  ${f.fileName}:${f.lineNum}: "${f.original}" → "${f.replacement}"\n`;
+    });
+  }
+
+  document.getElementById('modT').textContent = '📋 Review Summary';
+  document.getElementById('modB').innerHTML =
+    `<div class="sg">
+      <div class="sc st"><div class="n">${t}</div><div class="l">Total</div></div>
+      <div class="sc sa"><div class="n">${a}</div><div class="l">Accepted</div></div>
+      <div class="sc sr"><div class="n">${r}</div><div class="l">Rejected</div></div>
+    </div>
+    <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">
+      Copy the summary below and paste it into your AI assistant to apply accepted changes to your LaTeX source.
+    </p>
+    <pre id="expOut">${esc(exportText)}</pre>`;
+  document.getElementById('modF').innerHTML =
+    `<button class="bb" onclick="closeMod()">Close</button>
+     <button class="bb primary" onclick="copyExp()">📋 Copy to Clipboard</button>`;
+  document.getElementById('mod').classList.add('on');
+}
+
+function copyExp() {
+  const t = document.getElementById('expOut').textContent;
+  navigator.clipboard.writeText(t).then(() => {
+    const btn = document.querySelector('#modF .primary');
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = '📋 Copy to Clipboard', 2000);
+  });
+}
+function closeMod() { document.getElementById('mod').classList.remove('on'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMod(); });
+
+// ═══════════════════════════════════════
+//   APPLY CHANGES — builds modified content
+// ═══════════════════════════════════════
+function buildModifiedFiles() {
+  const accepted = allFindings.filter(f => f.status === 'accepted');
+  if (accepted.length === 0) return null;
+
+  const results = [];
+
+  fileContents.forEach((fc, fi) => {
+    const fileAccepted = accepted.filter(f => f.fileIdx === fi);
+    if (fileAccepted.length === 0) return;
+
+    let lines = fc.content.split('\n');
+
+    // Group accepted findings by line number
+    const byLine = {};
+    fileAccepted.forEach(f => {
+      if (!byLine[f.lineNum]) byLine[f.lineNum] = [];
+      byLine[f.lineNum].push(f);
+    });
+
+    // Apply changes per line
+    Object.keys(byLine).forEach(lnStr => {
+      const ln = parseInt(lnStr);
+      if (ln < 1 || ln > lines.length) return;
+      let line = lines[ln - 1];
+
+      // Sort: longer matches first to avoid partial overlap
+      const findings = byLine[ln].sort((a, b) => b.original.length - a.original.length);
+
+      findings.forEach(f => {
+        const escaped = f.original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(escaped, f.original === f.original.toLowerCase() ? 'gi' : 'g');
+        line = line.replace(re, f.replacement);
+      });
+
+      // Clean up artefacts from deletions
+      line = line.replace(/  +/g, ' ');
+      line = line.replace(/ ([.,;:!?)])/g, '$1');
+      line = line.replace(/([([]) /g, '$1');
+      line = line.replace(/^\s+$/, '');
+
+      lines[ln - 1] = line;
+    });
+
+    results.push({
+      name: fc.name,
+      path: fc.originalPath || '',
+      content: lines.join('\n'),
+      changeCount: fileAccepted.length,
+    });
+  });
+
+  return results;
+}
+
+// ═══════════════════════════════════════
+//   APPLY & SAVE / DOWNLOAD
+// ═══════════════════════════════════════
+async function applyAndDownload() {
+  const accepted = allFindings.filter(f => f.status === 'accepted');
+  if (accepted.length === 0) {
+    showToast('No accepted changes to apply. Accept some changes first!');
+    return;
+  }
+
+  const modified = buildModifiedFiles();
+  if (!modified || modified.length === 0) return;
+
+  // Try saving via the local server first
+  const isServed = location.protocol === 'http:' || location.protocol === 'https:';
+
+  if (isServed) {
+    try {
+      const resp = await fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: modified.map(m => ({
+            name: m.name,
+            path: m.path,
+            content: m.content,
+          }))
+        }),
+      });
+
+      if (resp.ok) {
+        const result = await resp.json();
+        showToast(`✅ ${result.count} file${result.count > 1 ? 's' : ''} saved to disk! Backups created in .deai-backups/`);
+        return;
+      }
+    } catch (e) {
+      // Server not available, fall through to download
+      console.warn('Server save failed, falling back to download:', e);
+    }
+  }
+
+  // Fallback: download files via browser
+  let downloadCount = 0;
+  modified.forEach(m => {
+    const blob = new Blob([m.content], { type: 'text/x-tex; charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = m.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    downloadCount++;
+  });
+
+  if (downloadCount > 0) {
+    showToast(`📥 ${downloadCount} modified .tex file${downloadCount > 1 ? 's' : ''} downloaded! Replace your originals.`);
+  }
+}
+
+// ═══════════════════════════════════════
+//   HELPERS
+// ═══════════════════════════════════════
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+function showWarning(msg) {
+  document.getElementById('warnText').textContent = msg;
+  document.getElementById('warnBanner').classList.add('visible');
+  setTimeout(() => document.getElementById('warnBanner').classList.remove('visible'), 5000);
+}
+function hideWarning() { document.getElementById('warnBanner').classList.remove('visible'); }
+function showToast(msg) {
+  const t = document.getElementById('toast'); t.textContent = msg;
+  t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000);
+}
+function showProcessing(text, sub) {
+  document.getElementById('procText').textContent = text;
+  document.getElementById('procSub').textContent = sub;
+  document.getElementById('procOverlay').classList.add('active');
+}
+function updateProcessing(text, sub) {
+  document.getElementById('procText').textContent = text;
+  document.getElementById('procSub').textContent = sub;
+}
+function hideProcessing() {
+  document.getElementById('procOverlay').classList.remove('active');
+}
+</script>
+</body>
+</html>
